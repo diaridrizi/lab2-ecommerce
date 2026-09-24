@@ -5,7 +5,7 @@ export default function NotFound() {
     <div className="empty">
       <h1>404</h1>
       <p>This page doesn't exist.</p>
-      <Link to="/" className="btn btn-primary">Back to shop</Link>
+      <Link to="/shop" className="btn btn-primary">Back to shop</Link>
     </div>
   );
 }

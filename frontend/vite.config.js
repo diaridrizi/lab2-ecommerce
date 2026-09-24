@@ -9,6 +9,8 @@ export default defineConfig({
     // so the frontend can call fetch('/api/...') without CORS issues.
     proxy: {
       '/api': 'http://localhost:5000',
+      // Real-time notifications (Socket.IO WebSockets)
+      '/socket.io': { target: 'http://localhost:5000', ws: true },
     },
   },
 });

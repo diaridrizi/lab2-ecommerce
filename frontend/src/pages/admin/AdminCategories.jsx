@@ -15,6 +15,7 @@ export default function AdminCategories() {
     try {
       await fn();
       load();
+      window.dispatchEvent(new Event('categories-changed')); // tell the header/footer menus to reload
     } catch (e) {
       setError(e.message);
     }

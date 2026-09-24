@@ -25,9 +25,11 @@ export default function Login() {
   return (
     <form className="card form auth-form" onSubmit={onSubmit}>
       <h1>Log in</h1>
+      {/* e.g. "You were logged out on this device." after "log out everywhere" */}
+      {location.state?.message && !error && <p className="alert alert-warning">{location.state.message}</p>}
       {error && <p className="alert alert-error">{error}</p>}
-      <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-      <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+      <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></label>
+      <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></label>
       <button className="btn btn-primary btn-block">Log in</button>
       <p className="muted small">
         Demo accounts: <code>customer@shop.local / customer123</code> · <code>admin@shop.local / admin123</code>

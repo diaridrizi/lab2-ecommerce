@@ -1,34 +1,45 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatDate, money } from '../../api.js';
+import { useRealtime } from '../../context/NotificationContext.jsx';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    api.get('/admin/stats').then(setStats).catch((e) => setError(e.message));
-  }, []);
+  const load = () => api.get('/admin/stats').then(setStats).catch((e) => setError(e.message));
+  useEffect(() => { load(); }, []);
+  // Live: numbers update when orders come in or change
+  useRealtime('order:created', load);
+  useRealtime('order:updated', load);
+  useRealtime('order:deleted', load);
 
   if (error) return <p className="alert alert-error">{error}</p>;
   if (!stats) return <p className="muted">Loading…</p>;
 
   const tiles = [
-    { label: 'Revenue', value: money(stats.revenue) },
-    { label: 'Orders', value: stats.orders },
-    { label: 'Products', value: stats.products },
-    { label: 'Customers', value: stats.customers },
+    { label: 'Revenue', value: money(stats.revenue), to: '/admin/orders' },
+    { label: 'Orders', value: stats.orders, to: '/admin/orders' },
+    { label: 'Products', value: stats.products, to: '/admin/products' },
+    { label: 'Customers', value: stats.customers, to: '/admin/users' },
+    { label: 'Reviews', value: stats.reviews, to: '/admin/reviews', mongo: true },
+    { label: 'Subscribers', value: stats.subscribers, to: '/admin/subscribers', mongo: true },
+    { label: 'Active banners', value: stats.activeBanners, to: '/admin/banners', mongo: true },
+    { label: 'Online now', value: stats.onlineUsers, to: '/admin/users', live: true },
   ];
 
   return (
     <>
       <h1>Dashboard</h1>
-      <div className="tiles">
-        {tiles.map((t) => (
-          <div key={t.label} className="card tile">
-            <span className="muted">{t.label}</span>
+      <div className="tiles stagger">
+        {tiles.map((t, i) => (
+          <Link key={t.label} to={t.to} className={`card tile ${t.mongo ? 'tile-mongo' : ''}`} style={{ '--i': i }}>
+            <span className="muted">
+              {t.label}{' '}
+              {t.live ? <span className="live-dot on">WebSocket</span> : <span className={`db-tag ${t.mongo ? 'mongo' : ''}`}>{t.mongo ? 'Mongo' : 'PG'}</span>}
+            </span>
             <strong>{t.value}</strong>
-          </div>
+          </Link>
         ))}
       </div>
 
@@ -39,6 +50,16 @@ export default function AdminDashboard() {
             <ul className="plain-list">
               {stats.ordersByStatus.map((s) => (
                 <li key={s.status}><span className={`status status-${s.status}`}>{s.status}</span> {s.count}</li>
+              ))}
+            </ul>
+          )}
+          <h3>Payments <span className="db-tag">PostgreSQL</span></h3>
+          {stats.ordersByPayment.length === 0 ? <p className="muted">No orders yet.</p> : (
+            <ul className="plain-list">
+              {stats.ordersByPayment.map((p) => (
+                <li key={p.payment_method}>
+                  <strong>{p.payment_method === 'card' ? 'Card' : 'Cash on delivery'}</strong> — {p.count} orders · {money(p.total)}
+                </li>
               ))}
             </ul>
           )}

@@ -29,7 +29,8 @@ export default function Register() {
       <label>Email<input type="email" name="email" value={form.email} onChange={onChange} required /></label>
       <label>
         Password
-        <input type="password" name="password" minLength="6" value={form.password} onChange={onChange} required />
+        <input type="password" name="password" minLength="8" value={form.password} onChange={onChange} autoComplete="new-password" required />
+        <span className="muted small">At least 8 characters, with a letter and a number</span>
       </label>
       <button className="btn btn-primary btn-block">Sign up</button>
       <p>Already have an account? <Link to="/login">Log in</Link></p>

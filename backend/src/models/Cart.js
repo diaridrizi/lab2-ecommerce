@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 const cartItemSchema = new mongoose.Schema(
   {
     productId: { type: Number, required: true }, // id of the product in PostgreSQL
+    size: { type: String, default: null }, // null for one-size products
     quantity: { type: Number, required: true, min: 1 },
     addedAt: { type: Date, default: Date.now },
   },

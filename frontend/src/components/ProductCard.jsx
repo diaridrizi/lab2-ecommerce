@@ -1,21 +1,25 @@
 import { Link } from 'react-router-dom';
-import { money } from '../api.js';
+import Price, { discountPercent, isNew, isOnSale } from './Price.jsx';
 
-export default function ProductCard({ product }) {
+export default function ProductCard({ product, index = 0 }) {
+  const soldOut = product.stock === 0;
+
   return (
-    <Link to={`/products/${product.slug}`} className="card product-card">
-      <img src={product.image_url || 'https://placehold.co/600x450?text=No+image'} alt={product.name} loading="lazy" />
-      <div className="product-card-body">
-        {product.category_name && <span className="tag">{product.category_name}</span>}
-        <h3>{product.name}</h3>
-        <div className="product-card-footer">
-          <strong>{money(product.price)}</strong>
-          {product.stock === 0 ? (
-            <span className="stock out">Out of stock</span>
-          ) : product.stock <= 5 ? (
-            <span className="stock low">Only {product.stock} left</span>
-          ) : null}
+    <Link to={`/products/${product.slug}`} className="product-card" style={{ '--i': index }}>
+      <div className="product-card-media">
+        <img src={product.image_url || 'https://placehold.co/800x800?text=No+image'} alt={product.name} loading="lazy" />
+        <div className="product-badges">
+          {isOnSale(product) && <span className="pbadge pbadge-sale">-{discountPercent(product)}%</span>}
+          {isNew(product) && <span className="pbadge">New</span>}
+          {soldOut && <span className="pbadge pbadge-muted">Sold out</span>}
         </div>
+        <span className="product-card-cta">View product</span>
+      </div>
+      <div className="product-card-body">
+        {product.brand && <span className="product-brand">{product.brand}</span>}
+        <h3>{product.name}</h3>
+        <Price product={product} />
+        {!soldOut && product.stock <= 5 && <span className="stock low">Only {product.stock} left</span>}
       </div>
     </Link>
   );

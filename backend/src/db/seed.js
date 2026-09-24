@@ -7,36 +7,51 @@ import { connectMongo } from '../config/mongo.js';
 import { Cart } from '../models/Cart.js';
 import { ActivityLog } from '../models/ActivityLog.js';
 import { slugify } from '../utils/helpers.js';
+import { categories, products, SIZE_RUNS } from './catalog-data.js';
+import { addDefaults } from './defaults.js';
+import { Banner } from '../models/Banner.js';
+import { Review } from '../models/Review.js';
+import { Subscriber } from '../models/Subscriber.js';
 
-const categories = ['Electronics', 'Clothing', 'Home & Kitchen', 'Books', 'Sports'];
+// Tiny seeded random generator so every seed run gives the same size stock
+function seededRandom(seed) {
+  let s = seed >>> 0; // mulberry32
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-// [name, category, price, stock, description]
-const products = [
-  ['Wireless Headphones', 'Electronics', 79.99, 25, 'Over-ear Bluetooth headphones with 30h battery and noise cancelling.'],
-  ['Smartwatch Pro', 'Electronics', 149.0, 12, 'Fitness tracking, heart-rate monitor and notifications on your wrist.'],
-  ['USB-C Charger 65W', 'Electronics', 29.5, 60, 'Fast charger for laptops and phones, foldable plug.'],
-  ['Mechanical Keyboard', 'Electronics', 89.9, 3, 'Hot-swappable switches, RGB backlight, aluminium frame.'],
-  ['Classic Denim Jacket', 'Clothing', 59.0, 18, 'Timeless blue denim jacket, regular fit.'],
-  ['Cotton T-Shirt', 'Clothing', 14.99, 100, '100% organic cotton, available in many colours.'],
-  ['Running Sneakers', 'Clothing', 99.0, 20, 'Lightweight running shoes with breathable mesh.'],
-  ['Espresso Machine', 'Home & Kitchen', 229.0, 7, '15-bar pump espresso maker with milk frother.'],
-  ['Non-stick Pan Set', 'Home & Kitchen', 49.9, 30, 'Three pans (20/24/28 cm), induction compatible.'],
-  ['Scented Candle', 'Home & Kitchen', 12.0, 45, 'Vanilla & sandalwood soy candle, 40h burn time.'],
-  ['JavaScript: The Good Parts', 'Books', 24.99, 15, 'A classic guide to the best features of JavaScript.'],
-  ['Clean Code', 'Books', 32.5, 10, 'A handbook of agile software craftsmanship.'],
-  ['Yoga Mat', 'Sports', 25.0, 40, 'Non-slip 6 mm mat with carrying strap.'],
-  ['Adjustable Dumbbells', 'Sports', 139.0, 5, 'Pair of dumbbells adjustable from 2 to 24 kg.'],
-  ['Football', 'Sports', 19.99, 50, 'Size 5 match ball, hand-stitched.'],
-];
+// Spread `total` units over the sizes; middle sizes get more, some sizes may end up sold out
+function spreadStock(total, sizes, seed) {
+  const rand = seededRandom(seed);
+  const weights = sizes.map((_, i) => {
+    const middle = 1 - Math.abs(i - (sizes.length - 1) / 2) / sizes.length;
+    return middle * (0.3 + rand());
+  });
+  const stock = sizes.map(() => 0);
+  for (let unit = 0; unit < total; unit++) {
+    let r = rand() * weights.reduce((a, b) => a + b, 0);
+    let i = 0;
+    while (i < sizes.length - 1 && r > weights[i]) r -= weights[i++];
+    stock[i] += 1;
+  }
+  return stock;
+}
 
 async function seed() {
   await connectPostgres();
   await connectMongo();
 
   console.log('Clearing old data...');
-  await pool.query('TRUNCATE order_items, orders, products, categories, users RESTART IDENTITY CASCADE');
-  await Cart.deleteMany({});
-  await ActivityLog.deleteMany({});
+  await pool.query(
+    'TRUNCATE order_items, orders, product_sizes, products, categories, shipping_methods, users RESTART IDENTITY CASCADE'
+  );
+  await Promise.all([
+    Cart.deleteMany({}), ActivityLog.deleteMany({}), Banner.deleteMany({}), Review.deleteMany({}), Subscriber.deleteMany({}),
+  ]);
 
   console.log('Creating users...');
   const adminHash = await bcrypt.hash('admin123', 10);
@@ -57,14 +72,44 @@ async function seed() {
     ]);
     catIds[name] = rows[0].id;
   }
-  for (const [name, cat, price, stock, description] of products) {
-    const slug = slugify(name);
-    await pool.query(
-      `INSERT INTO products (name, slug, description, price, stock, image_url, category_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [name, slug, description, price, stock, `https://picsum.photos/seed/${slug}/600/450`, catIds[cat]]
+  let sizeRows = 0;
+  for (const [index, p] of products.entries()) {
+    const slug = slugify(p.name);
+    const { rows } = await pool.query(
+      `INSERT INTO products (name, slug, brand, description, price, compare_at_price, stock, image_url,
+                             category_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW() - make_interval(days => $10), NOW() - make_interval(days => $10))
+       RETURNING id`,
+      [p.name, slug, p.brand, p.description, p.price, p.compareAt, p.stock, `/images/products/${slug}.jpg`,
+        catIds[p.category], p.daysAgo]
     );
+
+    const sizes = p.sizes ?? SIZE_RUNS[p.category];
+    if (sizes) {
+      const stock = spreadStock(p.stock, sizes, index + 1);
+      for (const [i, size] of sizes.entries()) {
+        await pool.query('INSERT INTO product_sizes (product_id, size, stock, sort_order) VALUES ($1, $2, $3, $4)', [
+          rows[0].id, size, stock[i], i,
+        ]);
+        sizeRows++;
+      }
+    }
   }
+  console.log(`  ${products.length} products, ${sizeRows} sizes`);
+
+  console.log('Creating delivery methods, banners, reviews and subscribers...');
+  await addDefaults();
+  // A few demo reviews by the demo customer (user id 2)
+  const demoReviews = [
+    ['air-jordan-1-retro-high-og-bred', 5, 'An absolute classic', 'True to size, the leather feels premium. Worth every cent.'],
+    ['nike-air-max-90', 4, 'Super comfy', 'Great for walking all day. Runs slightly small, so maybe go half a size up.'],
+    ['club-fleece-hoodie', 5, 'My new favourite hoodie', 'Soft, warm and it kept its shape after washing.'],
+  ];
+  for (const [slug, rating, title, body] of demoReviews) {
+    const { rows } = await pool.query('SELECT id FROM products WHERE slug = $1', [slug]);
+    await Review.create({ productId: rows[0].id, userId: 2, userName: 'Demo Customer', rating, title, body });
+  }
+  await Subscriber.create({ email: 'customer@shop.local', name: 'Demo Customer', source: 'footer' });
 
   await ActivityLog.create({ action: 'system.seed', meta: { products: products.length } });
 

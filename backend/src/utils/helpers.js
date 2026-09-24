@@ -2,10 +2,12 @@ import { ActivityLog } from '../models/ActivityLog.js';
 
 // Error with an HTTP status code. Throw it anywhere in a route:
 //   throw new HttpError(404, 'Product not found');
+// `code` is an optional machine-readable reason, e.g. 'TOKEN_EXPIRED' (the frontend refreshes the token on it)
 export class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 

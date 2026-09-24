@@ -1,107 +1,89 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { api } from '../api.js';
-import ProductCard from '../components/ProductCard.jsx';
+import HeroSlider from '../components/HeroSlider.jsx';
+import ProductRow from '../components/ProductRow.jsx';
+import Reveal from '../components/Reveal.jsx';
+import { CashIcon, ShieldIcon, SparkIcon, TruckIcon } from '../components/Icons.jsx';
+
+const CATEGORY_TILES = [
+  { label: 'Sneakers', to: '/shop?category=sneakers', image: '/images/banners/cat-sneakers.jpg' },
+  { label: 'Clothing', to: '/shop?category=clothing', image: '/images/banners/cat-clothing.jpg' },
+  { label: 'Accessories', to: '/shop?category=accessories', image: '/images/banners/cat-accessories.jpg' },
+  { label: 'Sale', to: '/shop?sale=1', image: '/images/banners/cat-sale.jpg', sale: true },
+];
+
+const USPS = [
+  { icon: TruckIcon, title: 'Free shipping', text: 'Standard delivery, no minimum' },
+  { icon: SparkIcon, title: 'New drops weekly', text: 'Fresh styles every week' },
+  { icon: CashIcon, title: 'Card or cash', text: 'Pay online or on delivery' },
+  { icon: ShieldIcon, title: 'Secure account', text: 'Track and cancel orders' },
+];
 
 export default function Home() {
-  // Filters live in the URL (?search=&category=&sort=&page=) so they survive a refresh
-  const [params, setParams] = useSearchParams();
-  const [categories, setCategories] = useState([]);
-  const [data, setData] = useState({ items: [], total: 0, page: 1, pages: 1 });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [searchInput, setSearchInput] = useState(params.get('search') || '');
+  const [brands, setBrands] = useState([]);
 
   useEffect(() => {
-    api.get('/categories').then(setCategories).catch(() => {});
+    api.get('/brands').then(setBrands).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    setLoading(true);
-    api
-      .get(`/products?${params.toString()}`)
-      .then((d) => { setData(d); setError(''); })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [params]);
-
-  const setParam = (key, value) => {
-    const next = new URLSearchParams(params);
-    if (value) next.set(key, value);
-    else next.delete(key);
-    if (key !== 'page') next.delete('page'); // go back to page 1 when filters change
-    setParams(next);
-  };
-
-  const onSearch = (e) => {
-    e.preventDefault();
-    setParam('search', searchInput.trim());
-  };
-
-  const activeCategory = params.get('category') || '';
-  const page = Number(params.get('page')) || 1;
 
   return (
     <>
-      <section className="hero">
-        <h1>Everything you need, in one place</h1>
-        <p className="muted">Browse {data.total} products across {categories.length} categories.</p>
-        <form className="search" onSubmit={onSearch}>
-          <input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search products…"
-            aria-label="Search products"
-          />
-          <button className="btn btn-primary">Search</button>
-        </form>
-      </section>
+      <HeroSlider />
 
-      <div className="toolbar">
-        <div className="chips">
-          <button className={`chip ${!activeCategory ? 'active' : ''}`} onClick={() => setParam('category', '')}>
-            All
-          </button>
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              className={`chip ${activeCategory === c.slug ? 'active' : ''}`}
-              onClick={() => setParam('category', c.slug)}
-            >
-              {c.name} <span className="muted">({c.product_count})</span>
-            </button>
+      <Reveal as="section" className="usp-bar">
+        <div className="container usp-grid">
+          {USPS.map(({ icon: Icon, title, text }) => (
+            <div key={title} className="usp">
+              <Icon />
+              <div><strong>{title}</strong><span>{text}</span></div>
+            </div>
           ))}
         </div>
-        <select value={params.get('sort') || 'newest'} onChange={(e) => setParam('sort', e.target.value)}>
-          <option value="newest">Newest</option>
-          <option value="price_asc">Price: low to high</option>
-          <option value="price_desc">Price: high to low</option>
-          <option value="name">Name A–Z</option>
-        </select>
-      </div>
+      </Reveal>
 
-      {error && <p className="alert alert-error">{error}</p>}
-      {loading ? (
-        <p className="muted">Loading products…</p>
-      ) : data.items.length === 0 ? (
-        <p className="empty">No products found.</p>
-      ) : (
-        <div className="grid">
-          {data.items.map((p) => <ProductCard key={p.id} product={p} />)}
+      <Reveal as="section" className="section container">
+        <div className="section-head"><h2 className="section-title">Shop by category</h2></div>
+        <div className="category-tiles">
+          {CATEGORY_TILES.map((c, i) => (
+            <Link key={c.label} to={c.to} className={`category-tile ${c.sale ? 'sale' : ''}`} style={{ '--i': i }}>
+              <img src={c.image} alt="" loading="lazy" />
+              <span className="category-tile-label">{c.label} <span className="arrow">→</span></span>
+            </Link>
+          ))}
         </div>
+      </Reveal>
+
+      <ProductRow title="New arrivals" query="sort=newest&limit=10" viewAllTo="/shop?sort=newest" />
+
+      {brands.length > 0 && (
+        <section className="brand-marquee" aria-label="Brands">
+          {/* the list is rendered twice so the loop is seamless */}
+          <div className="marquee-track">
+            {[...brands, ...brands].map((b, i) => (
+              <Link key={i} to={`/shop?brand=${encodeURIComponent(b.name)}`} className="marquee-item" tabIndex={i >= brands.length ? -1 : 0}>
+                {b.name}
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
-      {data.pages > 1 && (
-        <div className="pagination">
-          <button className="btn" disabled={page <= 1} onClick={() => setParam('page', String(page - 1))}>
-            ← Prev
-          </button>
-          <span>Page {page} of {data.pages}</span>
-          <button className="btn" disabled={page >= data.pages} onClick={() => setParam('page', String(page + 1))}>
-            Next →
-          </button>
+      <ProductRow title="Sale" query="sale=1&limit=10&sort=price_asc" viewAllTo="/shop?sale=1" />
+
+      <Reveal as="section" className="section container">
+        <div className="promo-banner">
+          <img src="/images/banners/store.jpg" alt="" loading="lazy" />
+          <div className="promo-content">
+            <span className="slide-eyebrow">Members</span>
+            <h2>Join FlowShop</h2>
+            <p>Create a free account to save your cart, check out faster and track every order.</p>
+            <Link to="/register" className="btn btn-light btn-lg">Create account</Link>
+          </div>
         </div>
-      )}
+      </Reveal>
+
+      <ProductRow title="Sneakers" query="category=sneakers&limit=10&sort=price_desc" viewAllTo="/shop?category=sneakers" />
     </>
   );
 }
